@@ -2,9 +2,11 @@ package frc.robot.subsystems;
 
 import com.revrobotics.CANSparkMax;
 import com.revrobotics.CANSparkLowLevel.MotorType;
-import com.revrobotics.CANSparkMax.ControlType;
-import com.revrobotics.RelativeEncoder;
-import com.revrobotics.SparkPIDController;
+import com.revrobotics.SparkLowLevel.ResetMode;
+import com.revrobotics.SparkLowLevel.PersistMode;
+import com.revrobotics.SparkMaxConfig;
+import com.revrobotics.spark.ClosedLoopController;
+import com.revrobotics.spark.config.ClosedLoopConfig;
 
 import edu.wpi.first.wpilibj.smartdashboard.SmartDashboard;
 import edu.wpi.first.wpilibj.DataLogManager;
@@ -16,28 +18,22 @@ import frc.robot.Constants;
 
 public class ElevatorSubsystem extends SubsystemBase {
 
-    private final double RPSperVolt = Constants.Elevator.RPSperVolt;
-
     private final double kP = Constants.Elevator.kP;
     private final double kI = Constants.Elevator.kI;
     private final double kD = Constants.Elevator.kD;
     private final double kS = Constants.Elevator.kS;
-    private final double kV = Constants.Elevator.kV;
-    private final double kA = Constants.Elevator.kA;
-    private final double kG = Constants.Elevator.kG;
-
     private final double cruiseVelocity = Constants.Elevator.cruiseVelocity;
     private final double acceleration = Constants.Elevator.acceleration;
 
     private final CANSparkMax masterMotor =
         new CANSparkMax(Constants.Elevator.masterID, MotorType.kBrushless);
-
     private final CANSparkMax slaveMotor =
         new CANSparkMax(Constants.Elevator.slaveID, MotorType.kBrushless);
 
-
-    private final SparkPIDController pid = masterMotor.getPIDController();
-    private final RelativeEncoder encoder = masterMotor.getEncoder();
+    private SparkMaxConfig masterConfig;
+    private SparkMaxConfig slaveConfig;
+    private ClosedLoopConfig closedLoopConfig;
+    private ClosedLoopController closedLoopController;
 
     private final DataLog log = DataLogManager.getLog();
     private final StringLogEntry elevatorLog =
@@ -45,41 +41,39 @@ public class ElevatorSubsystem extends SubsystemBase {
 
     private double holdPosition = 0.0;
 
-
     public ElevatorSubsystem() {
 
-        masterMotor.restoreFactoryDefaults();
-        slaveMotor.restoreFactoryDefaults();
+        masterConfig = new SparkMaxConfig();
+        slaveConfig = new SparkMaxConfig();
+        closedLoopConfig = new ClosedLoopConfig();
+        closedLoopController = masterMotor.getClosedLoopController();
 
-        slaveMotor.follow(masterMotor, true);
+        /* Motor Config */
+        masterConfig.idleMode(com.revrobotics.SparkLowLevel.IdleMode.kBrake).voltageCompensation(12.0).smartCurrentLimit(45);
 
-        encoder.setPosition(0);
+        slaveConfig.idleMode(com.revrobotics.SparkLowLevel.IdleMode.kBrake).follow(masterMotor).voltageCompensation(12.0).smartCurrentLimit(45);
 
-        masterMotor.setSmartCurrentLimit(50);
-        slaveMotor.setSmartCurrentLimit(50);
+        /* Closed Loop Config */
+        closedLoopConfig.pid(kP, kI, kD);
+        closedLoopConfig.maxMotionVelocity(cruiseVelocity);
+        closedLoopConfig.maxMotionAcceleration(acceleration);
+        closedLoopConfig.feedforward(kS);
 
-        pid.setP(kP);
-        pid.setI(kI);
-        pid.setD(kD);
-        pid.setFF(kS);
+        masterConfig.closedLoop.apply(closedLoopConfig);
 
-        pid.setOutputRange(-1, 1);
-
-        pid.setSmartMotionMaxVelocity(cruiseVelocity, 0);
-        pid.setSmartMotionMaxAccel(acceleration, 0);
+        /* Apply configs */
+        masterMotor.configure(masterConfig, ResetMode.kResetSafeParameters, PersistMode.kPersistParameters);
+        slaveMotor.configure(slaveConfig, ResetMode.kResetSafeParameters, PersistMode.kPersistParameters);
     }
 
 
-    /*Public Methods*/
-
     public void setPosition(double targetPosition) {
         holdPosition = targetPosition;
-        pid.setReference(targetPosition, ControlType.kSmartMotion);
+        closedLoopController.setReference(targetPosition, com.revrobotics.spark.ClosedLoopConfig.ControlType.kMAXMotionPosition);
     }
 
     public void moveManual(double volts) {
         masterMotor.setVoltage(volts);
-        holdPosition = encoder.getPosition(); 
     }
 
     public void stop() {
@@ -87,25 +81,24 @@ public class ElevatorSubsystem extends SubsystemBase {
     }
 
     public void reset() {
-        encoder.setPosition(0);
         holdPosition = 0;
+        masterMotor.getEncoder().setPosition(0);
     }
 
     public void holdElevatorPosition() {
-        pid.setReference(holdPosition, ControlType.kSmartMotion);
+        closedLoopController.setReference(holdPosition, com.revrobotics.spark.ClosedLoopConfig.ControlType.kMAXMotionPosition);
     }
-
 
     @Override
     public void periodic() {
 
         holdElevatorPosition();
 
-        SmartDashboard.putNumber("Elevator Pos", encoder.getPosition());
+        SmartDashboard.putNumber("Elevator Pos", masterMotor.getEncoder().getPosition());
         SmartDashboard.putNumber("Elevator Hold Target", holdPosition);
-        SmartDashboard.putNumber("Elevator Velocity", encoder.getVelocity());
+        SmartDashboard.putNumber("Elevator Velocity", masterMotor.getEncoder().getVelocity());
         SmartDashboard.putNumber("Elevator Motor Current", masterMotor.getOutputCurrent());
 
-        elevatorLog.append(Double.toString(encoder.getPosition()));
+        elevatorLog.append(Double.toString(masterMotor.getEncoder().getPosition()));
     }
 }
