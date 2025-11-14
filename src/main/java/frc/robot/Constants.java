@@ -86,6 +86,8 @@ public final class Constants {
     public static final double algaeBargeVoltage = -12.0;
     public static final double algaeOutVoltage = -4.0;
 
+    public static final double MAX_POSITION = 0.6;
+
   }
 
   public static class Intake {
