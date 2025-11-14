@@ -103,7 +103,8 @@ public final class Constants {
   public static class Climb {
     public static final class Climber {
       /* IDs */
-      public static final int motorID = 5;
+      public static final int masterID = 5;
+      public static final int slaveID = 6;
       /* Motor Config Values */
       public static final double peakForwardVoltage = 12.0;
       public static final double peakReverseVoltage = -12.0;
